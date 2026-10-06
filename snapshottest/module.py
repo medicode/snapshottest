@@ -1,7 +1,8 @@
 import codecs
 import errno
+import importlib.util
 import os
-import imp
+import sys
 from collections import defaultdict
 import logging
 
@@ -11,6 +12,20 @@ from .error import SnapshotNotFound
 
 
 logger = logging.getLogger(__name__)
+
+
+def _load_source(module_name, filepath):
+    """Import the file at `filepath` as `module_name`, like the `imp.load_source`
+    that Python 3.12 removed."""
+    spec = importlib.util.spec_from_file_location(module_name, filepath)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        del sys.modules[module_name]
+        raise
+    return module
 
 
 class SnapshotModule(object):
@@ -30,7 +45,7 @@ class SnapshotModule(object):
 
     def load_snapshots(self):
         try:
-            source = imp.load_source(self.module, self.filepath)
+            source = _load_source(self.module, self.filepath)
         # except FileNotFoundError:  # Python 3
         except (IOError, OSError) as err:
             if err.errno == errno.ENOENT:
